@@ -912,3 +912,8 @@ sigplot
 #ggsave("sigplot.pdf")
 ```
 
+# Session Info
+```{r}
+sessionInfo()
+```
+
