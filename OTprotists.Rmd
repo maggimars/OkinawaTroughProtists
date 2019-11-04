@@ -30,14 +30,14 @@ b = getNOAA.bathy(lon1 = 115, lon2 = 140, lat1 = 35, lat2 = 20, resolution = 1)
 ```
 
 Import dataframe with the latitude and longitude of sampling points from CTD (in decimal degrees):
-```{r}
+```
 pts <- read.csv("Mirai_CTD_lat_long.csv")
 pts$Station<- as.character(pts$Station)
 str(pts)
 ```
 
 Make dataframe with map labels and their lat/long: 
-```{r}
+```
 Clon = c(127.5,131.25, 121.6, 121.03, 120.8, 126)
 Clat= c(26, 31.93, 31.1, 23, 27.2, 22)
 CLabels= c("Okinawa", "Japan", "China", "Taiwan", "East China Sea", "Philippine Sea")
@@ -46,29 +46,26 @@ str(Countries)
 ```
 
 Make a dataframe with vent sites:
-```{r}
+```
 vents <- read.csv("VentSites.csv")
 str(vents)
 ```
 
 Make plot one layer at a time: 
 ```
-#tiff("MiraiFiltersMap.tiff", height= 8, width =8, units = 'in', res=300) # uncomment to save plot to file
 plot(b, image = TRUE, land = TRUE, xlim=c(120,135), ylim=c(22, 32), lwd = 0.03, bpal = list(c(0, max(b), grey(.7), grey(.9), grey(.95)),
-c(min(b), 0, "darkblue", "lightblue"))) 
-#plot(b, image = TRUE, land = TRUE, xlim=c(120,135), ylim=c(22, 32), lwd = 0.03, bpal = Newblues(100), cex.lab=1.5, cex.axis=1.5, cex.main=1.5, cex.sub=1.5)
-#bathymetry colors
+c(min(b), 0, "darkblue", "lightblue"))) #bathymetry colors
 plot(b, lwd = 0.8, deep = 0, shallow = 0, step = 0, add = TRUE) # highlight coastline with solid black line
-plot(b, deep=-200, shallow=-200, lwd = 0.4, drawlabels=T, add=T)  # Add -200m isobath
-plot(b, deep=-1000, shallow=-1000, lwd = 0.4, drawlabels=T, add=T)  # Add -1000m isobath
-plot(b, deep=-2000, shallow=-2000, lwd = 0.4, drawlabels=T, add=T)  # Add -2000m isobath
-plot(b, deep=-3000, shallow=-3000, lwd = 0.4, drawlabels=T, add=T)  # Add -3000m isobath
+plot(b, deep=-200, shallow=-200, lwd = 0.4, drawlabels=TRUE, add=TRUE)  # Add -200m isobath
+plot(b, deep=-1000, shallow=-1000, lwd = 0.4, drawlabels=TRUE, add=TRUE)  # Add -1000m isobath
+plot(b, deep=-2000, shallow=-2000, lwd = 0.4, drawlabels=TRUE, add=TRUE)  # Add -2000m isobath
+plot(b, deep=-3000, shallow=-3000, lwd = 0.4, drawlabels=TRUE, add=TRUE)  # Add -3000m isobath # Add -3000m isobath
 points(pts, pch = 16, col = 'red') # Add sampling points
-text(pts, labels=pts$Station, adj= 1.5, cex=1.2, size = 4) # Add sampling station numbers
+text(pts, labels=pts$Station, adj= 1.5, cex=1.2) # Add sampling station numbers
 text(Countries, labels=Countries$CLabels, cex= 1.7, adj = -0.2) # Add map labels 
-points(vents, pch = 17, col = 'blue', size = 3)
-#dev.off() #uncomment to save plot to file
+points(vents, pch = 17, col = 'blue') # Add vent points
 ```
+
 ![](MiraiFiltersMap_noRyukyuCurrent.png)
 
 #Sequence analysis
@@ -166,7 +163,6 @@ library("wesanderson")
 library("gridExtra")
 library("metagMisc")
 library("wesanderson")
-library("breakaway")
 library("CoDaSeq")
 library("ggbiplot")
 library(ggpubr)
@@ -183,7 +179,7 @@ phyloseq<-qza_to_phyloseq(features="mergedtable.qza")
 ```
 
 Import sample data:
-```{r}
+```{r importMeta}
 metatable <- read.csv("sampleMap.csv")
 row.names(metatable) <- metatable[[1]]
 
@@ -241,7 +237,7 @@ prevplot1
 
 *We don't apply prevalence filter* because we are interested in rare ASVs in deep water masses and at hydrothermal vents. 
 
-##Basic statistics
+##Basic summary statistics
 
 ```{r}
 OTUs <- data.frame(otu_table(ps))
@@ -256,7 +252,6 @@ sum(OTUsRSnoZero)
 ```
 
 Total number of ASVs per sample (range and mean):
-
 ```{r}
 OTUs0 <- OTUs!=0 #is this number not a zero? true (1) or false (0)
 csums <- colSums(OTUs0) # col sums = observed ASV richness
@@ -268,59 +263,122 @@ mean(csumdf$csums) #730
 
 ##Alpha Diversity
 
-**Breakaway Modeled Richness for all samples by depth layer:** 
-```{r , warning = FALSE, message = FALSE}
-ba <- breakaway(ps)
+###All samples ~ depth
 
-badf<- summary(ba) %>%
-  add_column("SampleID" = ps %>% otu_table %>% sample_names)
+**Observed Richness**
 
-badf<- merge(badf, metatable, by = "SampleID")
-
-baPlot <- ggplot(badf, aes(x=Depth, y=estimate, fill=filter)) + geom_boxplot() + theme_bw() + scale_fill_manual(values = c("#E3E5DB", "#11638C"), labels=c("10.0", "0.2")) + theme(text = element_text(size=14)) +ylab("Richness Estimate")
-
-baPlot
-ggsave("breakaway_4depths.tiff", width = 6, height = 4)
-```
-
-**Breakaway alpha diversity significance testing for all samples by depth layer:**
 ```{r}
-bt <- betta(summary(ba)$estimate,
-            summary(ba)$error,
-            make_design_matrix(ps, "Depth"))
-bt$table
-```
-The modeled richness in the SCM is significantly higher than all other sample types, which are not significantly different from each other. 
+plugin <- ps  %>%
+            estimate_richness(measures = "Observed") %$% Observed
+char <- ps %>% sample_data %$% Depth
+filter <- ps %>% sample_data %$% filter
 
-Breakaway Modeled Richness for all bottom water samples by sampling station: 
+richness<- data.frame(plugin, char, filter )
+names(richness) <- c("richness", "Depth", "filter")
+richness$Depth<- factor(richness$Depth, levels = c("Bottom", "Mid", "SCM", "Surface"))
+
+RichDepth<- ggplot(richness, aes(x=Depth, y=richness, fill = filter))+geom_boxplot() + theme_bw() + scale_fill_manual(values = c("#E3E5DB", "#11638C"), labels=c("10.0", "0.2")) + theme(text = element_text(size=14)) +ylab("Observed Richness") +ggtitle("A")
+
+RichDepth
+```
+
+Significance testing for Observed Richness between depths: 
+```{r}
+pairwise.wilcox.test(richness$richness, richness$Depth)
+```
+
+*SCM is significantly different (higher richness) than all other depths.* 
+
+**Shannon Index**
+```{r}
+plugin <- ps  %>%
+            estimate_richness(measures = "Shannon") %$% Shannon
+char <- ps %>% sample_data %$% Depth
+filter <- ps %>% sample_data %$% filter
+
+shan <- data.frame(plugin, char, filter )
+names(shan) <- c("diversity", "Depth", "filter")
+shan$Depth<- factor(shan$Depth, levels = c("Bottom", "Mid", "SCM", "Surface"))
+
+ShanDepth<- ggplot(shan, aes(x=Depth, y=diversity, fill = filter))+geom_boxplot() + theme_bw() + scale_fill_manual(values = c("#E3E5DB", "#11638C"), labels=c("10.0", "0.2")) + theme(text = element_text(size=14)) +ylab("Shannon Index") + ggtitle("B")
+
+
+ShanDepth
+```
+
+Significance testing for Shannon Index between depths: 
+```{r}
+pairwise.wilcox.test(shan$diversity, shan$Depth)
+```
+*SCM and Surface are significantly different (higer Shannon Index) than Mid and Bottom. SCM and SUrface are not significantly different from eachother and Mid and Bottom are not significantly different from eachother* 
+
+
+###Bottom Water samples ~ station
+
 ```{r}
 bottomraw<- subset_samples(ps, Depth=="Bottom")
 ```
 
-```{r richness_all_bottoms, warning = FALSE, message  = FALSE}
-bba <- breakaway(bottomraw)
+**Observed Richness**
 
-bbadf<- summary(bba) %>%
-  add_column("SampleID" = bottomraw %>% otu_table %>% sample_names)
-
-bbadf<- merge(bbadf, metatable, by = "SampleID")
-bbadf$Station_f <- factor(bbadf$Station, levels=c("11", "10", "9", "8", "3", "4", "2", "5", "12", "13", "14", "15", "17", "18"))
-bbaPlot <- ggplot(bbadf, aes(x=Station_f, y=estimate, fill=filter)) + geom_boxplot() + theme_bw() + scale_fill_manual(values = c("#E3E5DB", "#11638C"), labels=c("10.0", "0.2")) + theme(text = element_text(size=14)) +ylab("Richness Estimate") +xlab("Station")
-
-bbaPlot
-ggsave("breakaway_bottom.tiff", width = 6, height = 4)
-```
-
-Breakaway alpha diversity significance testing for bottom samples by vent (stations 2, 10), plume (station 11), or no hydrothermal activity (all other stations):
 ```{r}
-bt <- betta(summary(bba)$estimate,
-            summary(bba)$error,
-            make_design_matrix(bottomraw, "VentPlume"))
-bt$table
-```
-Vent/Plume sites are not more or less diverse than sites without hydrothermal influence.
+plugin <- bottomraw  %>%
+            estimate_richness(measures = "Observed") %$% Observed
+char <- bottomraw %>% sample_data %$% Station
+filter <- bottomraw %>% sample_data %$% filter
+ventplume<- bottomraw %>% sample_data %$% VentPlume
+vent <- bottomraw %>% sample_data %$% Vent
 
-##Taxonomic Filtering
+rich <- data.frame(plugin, char, filter, ventplume, vent )
+names(rich) <- c("diversity", "Station", "filter", "VentPlume", "Vent")
+rich$Station<- factor(rich$Station, levels=c("11", "10", "9", "8", "3", "4", "2", "5", "12", "13", "14", "15", "17", "18"))
+
+RichBottom<- ggplot(rich, aes(x=Station, y=diversity, fill = filter))+geom_boxplot() + theme_bw() + scale_fill_manual(values = c("#E3E5DB", "#11638C"), labels=c("10.0", "0.2")) + theme(text = element_text(size=14)) +ylab("Observed Richness") +xlab("Station") + ggtitle("C")
+RichBottom
+```
+
+```{r}
+pairwise.wilcox.test(rich$diversity, rich$VentPlume)
+```
+
+**Shannon Index**
+
+```{r}
+plugin <- bottomraw  %>%
+            estimate_richness(measures = "Shannon") %$% Shannon
+char <- bottomraw %>% sample_data %$% Station
+filter <- bottomraw %>% sample_data %$% filter
+ventplume<- bottomraw %>% sample_data %$% VentPlume
+vent<- bottomraw %>% sample_data %$% Vent
+
+shan <- data.frame(plugin, char, filter, ventplume, vent )
+names(shan) <- c("diversity", "Station", "filter", "VentPlume", "Vent")
+shan$Station<- factor(shan$Station, levels=c("11", "10", "9", "8", "3", "4", "2", "5", "12", "13", "14", "15", "17", "18"))
+
+ShanBottom<- ggplot(shan, aes(x=Station, y=diversity, fill = filter))+geom_boxplot()+  theme_bw()+ scale_fill_manual(values = c("#E3E5DB", "#11638C"), labels=c("10.0", "0.2")) + theme(text = element_text(size=14)) +ylab("Shannon Index") +xlab("Station") +ggtitle("D")
+ShanBottom
+```
+
+```{r}
+pairwise.wilcox.test(shan$diversity, shan$VentPlume)
+```
+
+
+Put figures together
+```{r, message=FALSE, warning=FALSE}
+supp_alpha<-ggarrange(RichDepth, ShanDepth, RichBottom, ShanBottom, common.legend = TRUE, legend = "bottom")
+```
+```{r}
+supp_alpha
+```
+
+```{r}
+#ggsave("alphadiversity_panel.pdf")
+```
+
+##Distance and Ordination
+
+**Taxonomic Filtering**
 
 * Remove ASV's without a D1 ("Kingdom") taxonomy assignment 
 * Remove ASV's assigned as Metazoa at D2
@@ -346,15 +404,10 @@ min(csumdf$csums) #45
 mean(csumdf$csums) #685
 ```
 
-##Distance and Ordination 
+###Atchison distance
 
-###All Samples
-
-####Atchison distance (CLR + Euclidean)
 * compute CLR normalization, CLR = centered log-ratio, log(x/gx) where gx is the geomentric mean of vector x
-* Then use Euclidean distance 
-* PCoA and/or PCA
-* PERMANOVA 
+
 ```{r, message = FALSE, warning = FALSE}
 OTU4clr<- data.frame(t(data.frame(otu_table(ps))))
 row.names(OTU4clr) <- gsub("\\.", "", row.names(OTU4clr))
@@ -367,16 +420,27 @@ META2<- sample_data(metatable)
 psCLR <- phyloseq(OTU2,TAX,META2)
 ```
 
-```{r AitchinsonPCoA_All, warning = FALSE, message = FALSE }
+### PCoA for all samples
+
+```{r AitchinsonPCoA_All1, warning = FALSE, message = FALSE }
 ordu = ordinate(psCLR, "PCoA", "euclidean")
 p<-plot_ordination(psCLR, ordu, color="Depth", shape="filter")+theme_bw() +scale_color_manual(values=c(ap[8], ap[12], ap[5], ap[4])) + scale_shape_discrete(labels=c("10.0", "0.2")) +geom_point(size=3) +theme(text = element_text(size=16)) 
 p
 ```
+
 ```{r}
-#ggsave("pcoa_allsamples.tiff", width = 6, height = 4)
+ggsave("pcoa_allsamples.tiff", width = 6, height = 4)
 ```
 
-###Ordination for sample subgroups (Depth and Depth/Filter-type)
+PERMANOVA by depth
+```{r, warning = FALSE}
+meta <- metatable[row.names(metatable) %in% row.names(OTU2),]
+set.seed(1)
+adonis(vegdist(OTU2, method = "bray") ~ Depth, data = meta)
+```
+
+
+### PCoA by depth (shows differences in filter-size)
 
 The strongest determinant of clustering seems to be depth. To better observe clustering within depth groups, subset by depth and then filter type.
 
@@ -385,321 +449,48 @@ The strongest determinant of clustering seems to be depth. To better observe clu
 ```{r pcoa_surf}
 physeqSurf<- subset_samples(psCLR, Depth == "Surface")
 ordu = ordinate(physeqSurf, "PCoA", "euclidean")
-pSurf<-plot_ordination(physeqSurf, ordu, color="Depth", shape="filter")+theme_bw() +scale_color_manual(values= c(ap[4]))+ geom_point(size=3) +ggtitle("Surface") +theme(text = element_text(size=16)) + guides(color = FALSE) + scale_shape_discrete(labels=c("10.0", "0.2"))
+pSurf<-plot_ordination(physeqSurf, ordu, color="Depth", shape="filter")+theme_bw() +scale_color_manual(values= c(ap[4]))+ geom_point(size=3) +ggtitle("A. Surface") +theme(text = element_text(size=16)) + guides(color = FALSE) + scale_shape_discrete(labels=c("10.0", "0.2"))
 pSurf
 ```
-Samples cluster by filter type. 
 
-####Surface 10.0
-
-**PCA**
-
-```{r surf10_pcaLines}
-physeqSurf<- subset_samples(psCLR, Depth == "Surface" & filter == "10")
-OTUsSurf10 <- data.frame(otu_table(physeqSurf))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsSurf10),]
-Surface_10<- prcomp(OTUsSurf10)
-plot(Surface_10, type="lines")
-```
-
-```{r PCA_Surf10}
-PCA_Surf10<-ggbiplot(Surface_10, var.axes = FALSE, groups= meta$Region_SKN, ellipse=TRUE) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2]))+ theme(text = element_text(size=14)) +  theme(legend.position="bottom") +ggtitle("Surface 10.0")
-PCA_Surf10
-```
-
-**PERMANOVA**
-```{r}
-set.seed(1)
-adonis(vegdist(OTUsSurf10, method = "euclidean") ~ Region_SKN, data = meta)
-```
-
-**Pairwise PERMANOVA**
-```{r}
-tst<-adonis_pairwise(x=meta, dd=vegdist(OTUsSurf10, method = "euclidean"), group.var="Region_SKN")
-tst$Adonis.tab
-```
-* KG to North - Diff
-* KG to South - NOT diff
-* North to South - Diff
-
-####Surface 0.2
-
-**PCA**
-```{r}
-physeqSurf2<- subset_samples(psCLR, Depth == "Surface" & filter == "2")
-```
-```{r surf2_pcaLines}
-#tiff("variance_surface2.tiff", height= 8, width =8, units = 'in', res=70) # uncomment to save plot to file
-OTUsSurf2 <- data.frame(otu_table(physeqSurf2))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsSurf2),]
-surface2 <- prcomp(OTUsSurf2)
-plot(surface2, type="lines")
-#dev.off()
-```
-
-```{r PCA_Surf2}
-PCA_Surf2<-ggbiplot(surface2, var.axes = FALSE, groups= meta$Region_SKN, ellipse=TRUE ) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2]))+ theme(text = element_text(size=14)) +  theme(legend.position="bottom") +ggtitle("Surface 0.2")
-PCA_Surf2
-```
-
-**PERMANOVA**
-```{r}
-set.seed(1)
-adonis(vegdist(OTUsSurf2, method = "euclidean") ~ Region_SKN, data = meta)
-```
-
-**Pairwise PERMANOVA**
-```{r}
-tst<-adonis_pairwise(x=meta, dd=vegdist(OTUsSurf2, method = "euclidean"), group.var="Region_SKN")
-tst$Adonis.tab
-```
-
-* KG to North - Diff
-* KG to South - NOT diff
-* North to South - Diff
-
-###SCM
+####SCM
 ```{r PCoA_SCM }
 physeqSCM<- subset_samples(psCLR, Depth == "SCM")
 ordu = ordinate(physeqSCM, "PCoA", "euclidean")
-pSCM<-plot_ordination(physeqSCM, ordu, color="Depth", shape="filter")+theme_bw() +scale_color_manual(values=c(ap[5]))+ geom_point(size=3) +ggtitle("SCM") +theme(text = element_text(size=16))
+pSCM<-plot_ordination(physeqSCM, ordu, color="Depth", shape="filter")+theme_bw() +scale_color_manual(values=c(ap[5]))+ geom_point(size=3) +ggtitle("B. SCM") +theme(text = element_text(size=16))
 pSCM
 ```
 Again, strong clustering by filter type. 
 
-####SCM 10.0
 
-**PCA**
-```{r SCM10_pcaLines}
-physeqSCM10<- subset_samples(psCLR, Depth == "SCM" & filter =="10")
-OTUsSCM10 <- data.frame(otu_table(physeqSCM10))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsSCM10),]
-SCM10 <- prcomp(OTUsSCM10)
-plot(SCM10, type="lines")
-```
-
-```{r PCA_SCM10}
-PCA_SCM10<-ggbiplot(SCM10, var.axes = FALSE, groups= meta$Region_SKN, ellipse=TRUE ) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2]))+ theme(text = element_text(size=14)) +  theme(legend.position="bottom") +ggtitle("SCM 10.0")
-PCA_SCM10
-```
-
-**PERMANOVA**
-```{r}
-set.seed(1)
-adonis(vegdist(OTUsSCM10, method = "euclidean") ~ Region_SKN, data = meta)
-```
-**pairwise PERMANOVA**
-
-```{r}
-tst<-adonis_pairwise(x=meta, dd=vegdist(OTUsSCM10, method = "euclidean"), group.var="Region_SKN")
-tst$Adonis.tab
-```
-* KG and NOT = Different
-* NOT and SOT = Different
-* KG and SOT = Not Different
-
-####SCM 0.2
-
-**PCA**
-```{r SCM2_pcaLines}
-physeqSCM2<- subset_samples(psCLR, Depth == "SCM" & filter == "2")
-OTUsSCM2 <- data.frame(otu_table(physeqSCM2))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsSCM2),]
-SCM2 <- prcomp(OTUsSCM2)
-plot(SCM2, type="lines")
-```
-
-```{r PCA_SCM2}
-PCA_SCM2<-ggbiplot(SCM2, var.axes = FALSE, groups= meta$Region_SKN, ellipse=TRUE ) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2]))+ theme(text = element_text(size=14)) +  theme(legend.position="bottom") +ggtitle("SCM 0.2")
-PCA_SCM2
-```
-
-**PERMANOVA**
-```{r}
-set.seed(1)
-adonis(vegdist(OTUsSCM2, method = "euclidean") ~ Region_SKN, data = meta)
-```
-
-###Mid
+####Mid
 
 ```{r PCoA_Mid}
 physeqMid<- subset_samples(psCLR, Depth == "Mid")
 ordu = ordinate(physeqMid, "PCoA", "euclidean")
-pMid<-plot_ordination(physeqMid, ordu, color="Depth", shape = "filter")+theme_bw() +scale_color_manual(values=ap[12])+ geom_point(size=3) +ggtitle("Mid")+theme(text = element_text(size=16))
+pMid<-plot_ordination(physeqMid, ordu, color="Depth", shape = "filter")+theme_bw() +scale_color_manual(values=ap[12])+ geom_point(size=3) +ggtitle("C. Mid")+theme(text = element_text(size=16))
 pMid
 ```
 
 Samples still cluster by filter pore-size, but now on the secondary axis.
 
-####Mid 10.0
-
-**PCA**
-```{r Mid10_pcaLines}
-physeqMid10<- subset_samples(psCLR, Depth == "Mid" & filter == "10")
-OTUsMid10 <- data.frame(otu_table(physeqMid10))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsMid10),]
-Mid10 <- prcomp(OTUsMid10)
-plot(Mid10, type="lines")
-```
-
-```{r PCA_Mid10}
-PCA_Mid10<-ggbiplot(Mid10, var.axes = FALSE, groups= meta$Region_SKN, ellipse=TRUE ) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2]))+ theme(text = element_text(size=14)) +  theme(legend.position="bottom") +ggtitle("Mid 10.0")
-PCA_Mid10
-```
-
-**PERMANOVA by Region**
-```{r}
-adonis(vegdist(OTUsMid10, method = "euclidean") ~ Region_SKN, data = meta, permutations = 999)
-```
-*not significant at our cut-off*
-
-####Mid 0.2
-
-**PCA**
-```{r Mid2}
-physeqMid2<- subset_samples(psCLR, Depth == "Mid" & filter == "2")
-OTUsMid2 <- data.frame(otu_table(physeqMid2))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsMid2),]
-Mid2 <- prcomp(OTUsMid2)
-plot(Mid2, type="lines")
-```
-
-```{r PCA_Mid2}
-PCA_Mid2<-ggbiplot(Mid2, var.axes = FALSE, groups= meta$Region_SKN, ellipse=TRUE ) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2]))+ theme(text = element_text(size=14)) +  theme(legend.position="bottom") +ggtitle("Mid 0.2")
-PCA_Mid2
-```
-
-```{r}
-#ggsave("PCA_Mid2.png")
-```
-
-**PERMANOVA by Region**
-```{r}
-set.seed(1)
-adonis(vegdist(OTUsMid2, method = "euclidean") ~ Region_SKN, data = meta)
-```
-
-**pairwise PERMANOVA**
-```{r}
-tst<-adonis_pairwise(x=meta, dd=vegdist(OTUsMid2, method = "euclidean"), group.var="Region_SKN")
-tst$Adonis.tab
-```
-
-* North to South = diff
-* KG to North = diff
-* KG to South = not diff
-
-###Bottom
+####Bottom
 
 ```{r PCoA_Bottom}
 physeqBottom<- subset_samples(psCLR, Depth == "Bottom")
 ordu = ordinate(physeqBottom, "PCoA", "euclidean")
-pBottom<-plot_ordination(physeqBottom, ordu, color="Depth", shape = "filter")+theme_bw() +scale_color_manual(values=ap[8])+ geom_point(size=3) +ggtitle("Bottom")+theme(text = element_text(size=16))
+pBottom<-plot_ordination(physeqBottom, ordu,color="Depth", shape = "filter")+theme_bw() +scale_color_manual(values=ap[8])+ geom_point(size=3) +ggtitle("D. Bottom")+theme(text = element_text(size=16))
 pBottom 
 ```
-No clustering by filter type. 
-
-For consistency, split by filter type for the NOT/SOT/KG biogeography: 
-
-####Bottom 10.0
-
-**PCA**
-```{r bottom10_pcaLines}
-physeqBottom10<- subset_samples(psCLR, Depth == "Bottom" & filter == "10")
-OTUsBottom10 <- data.frame(otu_table(physeqBottom10))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsBottom10),]
-Bottom10 <- prcomp(OTUsBottom10)
-plot(Bottom10, type="lines")
-```
-
-```{r PCA_Bottom10}
-PCA_Bottom10<-ggbiplot(Bottom10, var.axes = FALSE, groups= meta$Region_SKN, ellipse=TRUE ) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2]))+ theme(text = element_text(size=14)) +  theme(legend.position="bottom") +ggtitle("Bottom 10.0")
-PCA_Bottom10
-```
-
-**PERMANOVA by Region**
-```{r}
-set.seed(1)
-adonis(vegdist(OTUsBottom10, method = "euclidean") ~ Region_SKN , data = meta)
-```
-*not significant at our cut-off*
 
 
-####Bottom 0.2
-
-**PCA**
-```{r}
-physeqBottom2<- subset_samples(psCLR, Depth == "Bottom" & filter == "2")
-OTUsBottom2 <- data.frame(otu_table(physeqBottom2))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsBottom2),]
-Bottom2 <- prcomp(OTUsBottom2)
-plot(Bottom2, type="lines")
-```
-
-```{r PCA_Bottom2}
-PCA_Bottom2<-ggbiplot(Bottom2, var.axes = FALSE, groups= meta$Region_SKN, ellipse=TRUE ) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2]))+ theme(text = element_text(size=14)) +  theme(legend.position="bottom") +ggtitle("Bottom 0.2")
-PCA_Bottom2
-```
-
-**PERMANOVA by region**
-```{r}
-set.seed(1)
-adonis(vegdist(OTUsBottom2, method = "euclidean") ~ Region_SKN, data = meta)
-```
-
-**Pairwise PERMANOVA**
-```{r}
-tst<-adonis_pairwise(x=meta, dd=vegdist(OTUsBottom2, method = "euclidean"), group.var="Region_SKN")
-tst$Adonis.tab
-```
-
-* North to South = diff
-* KG to North = not diff
-* KG to South =  diff
-
-*Pattern reversed from that seen in Mid, SCM, and Surface*
-
-**Supplemental Figure 1**
+**Supplemental Figure PCoA**
 ```{r suppFig1, warning = FALSE, message = FALSE}
-supp1<-ggarrange(pSurf, pSCM, pMid, pBottom, common.legend = TRUE, legend = "bottom")
-supp1
+supp_pcoa<-ggarrange(pSurf, pSCM, pMid, pBottom, common.legend = TRUE, legend = "bottom")
 ```
 ```{r}
-#ggsave("Supplemental1.png", width = 6, height = 6 )
-```
-
-**Bottom-water by Hydrothermal Activity**
-
-For Vent v. Plume - use 10.0 and 0.2 samples together because 0.2 and 10.0 pore-size filters do not cluster separately in the PCoA and necessary because there are a low number of vent sites compared to non-vent sites 
-
-**PERMANOVA**
-
-```{r}
-set.seed(1)
-physeqBottom<- subset_samples(psCLR, Depth == "Bottom")
-OTUsBottom <- data.frame(otu_table(physeqBottom))
-meta <- metatable[row.names(metatable) %in% row.names(OTUsBottom),]
-adonis(vegdist(OTUsBottom, method = "euclidean") ~ VentPlume, data = meta)
-```
-**pairwise PERMANOVA**
-```{r}
-tst<-adonis_pairwise(x=meta, dd=vegdist(OTUsBottom, method = "euclidean"), group.var="VentPlume")
-tst$Adonis.tab
-```
-
-* Vents v. Plume = Not diff
-* Vents v. NO hydrothermal activity = Different
-* Plume v. NO hydrothermal activity = Different
-
-**PCA**
-```{r PRC_BottomVents}
-Bottom <- prcomp(OTUsBottom)
-plot(Bottom, type="lines")
-```
-
-```{r PCA_Bottom}
-PCA_Bottom<-ggbiplot(Bottom, var.axes = FALSE, groups= meta$VentPlume, ellipse=TRUE ) +theme_bw() +scale_color_manual(values= c(wes_palette("Cavalcanti1")[4], wes_palette("Cavalcanti1")[1], wes_palette("Cavalcanti1")[5] ), labels= c("none", "plume", "vent"))+ theme(text = element_text(size=16)) +  theme(legend.position="bottom")
-PCA_Bottom
+supp_pcoa
+#ggsave("Supplemental_PCoA_byDepth.png", width = 6, height = 6 )
 ```
 
 ## Relative Abundance Plots
@@ -707,7 +498,7 @@ PCA_Bottom
 Merge Samples --> collapse replicates (for Relative Abundance Plots)
 
 Prepare metadata table:
-```{r}
+```{r makepsforRelAbundPlot}
 metatable <- read.csv("sampleMap.csv")
 row.names(metatable) <- metatable[[1]]
 metatable$desc <- paste(metatable$Station, metatable$Depth, metatable$filter, sep="-")
@@ -723,9 +514,6 @@ sample_data(ps2) <- META
 ```{r}
 print(ps2)
 ```
-```{r}
-str(sample_data(ps2))
-```
 
 Merge:
 ```{r, warning=FALSE}
@@ -733,15 +521,6 @@ mergedps <- merge_samples(ps2, "desc")
 print(mergedps)
 ```
 *number of samples reduced from 211 to 112*
-
-```{r}
-sample_names(mergedps)
-```
-
-But metatable inside phyloseq object was disturbed ... 
-```{r}
-str(sample_data(mergedps))
-```
 
 Fix meta table in phyloseq object: 
 ```{r}
@@ -757,11 +536,6 @@ META <-sample_data(meta2)
 sample_data(mergedps)<-META
 ```
 
-Fixed!
-```{r}
-str(sample_data(mergedps))
-```
-
 Taxa glom - for clean RA plots (so that there is a not a line in the plot for each ASV)
 ```{r}
 mergedps<- subset_taxa(mergedps, D2 != "Metazoa")
@@ -771,6 +545,7 @@ mergedps<-subset_taxa(mergedps, D1 != "NA")
 mergedps = tax_glom(mergedps, "D2")
 ```
 
+remove groups that are so low in abundance they are not visible in the RA plot (only necessary to decrease the number of colors needed)
 ```{r}
 '%ni%' <- Negate('%in%')
 LowPrev<- c("Alveolata_X", "Amoebozoa_X", "Apicomplexa", "Apusomonadidae", "Conosa", "Discoba", "Eukaryota_XX", "Foraminifera", "Hilomonadea","Fungi", "Katablepharidophyta", "Lobosa", "Mesomycetozoa", "Metamonada", "Metazoa", "Opisthokonta_X", "Perkinsea", "Streptophyta", "Rhodophyta","Telonemia", "")
@@ -807,25 +582,7 @@ legend <- g_legend(taxabarplot)
 plegend <- grid.arrange(legend)
 ```
 
-
-```{r}
-taxabarplotD1<-plot_bar(mergedRAhp, x= "Station_f", fill = "D1", facet_grid=filter~Depth_f) + scale_y_continuous(expand = c(0, 0)) + ggtitle("") + scale_fill_manual(values=ap) + theme(legend.title=element_blank()) + geom_bar(aes(fill=D1), stat="identity", position="stack", width =0.9) +theme_classic() + theme(text = element_text(size=14))+theme(axis.text.x = element_text(angle = 90)) + xlab("Station") +ylab("Relative Abundance(%)")
-
-taxaplotD1_nolegend <- taxabarplotD1 + theme(legend.position="none")
-
-taxaplotD1_nolegend
-```
-
-```{r, echo = FALSE}
-g_legend<-function(a.gplot){
-  tmp <- ggplot_gtable(ggplot_build(a.gplot))
-  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
-  legend <- tmp$grobs[[leg]]
-  legend
-}
-legend <- g_legend(taxabarplotD1)
-D1legend <- grid.arrange(legend)
-```
+take a closer look at bottom samples: 
 
 ```{r BottomTaxaplotD2}
 BottomTaxa<-subset_samples(mergedRAhp, Depth == "Bottom")
@@ -837,33 +594,357 @@ Bottombarplot_nolegend <- Bottombarplot+ theme(legend.position="none")
 Bottombarplot_nolegend
 ```
 
+Differences visible at higher taxonomic ranking?
 ```{r}
-#ggsave("Bottombarplot_nolegend.pdf", width=8, height =4)
+taxabarplotD1<-plot_bar(mergedRAhp, x= "Station_f", fill = "D1", facet_grid=filter~Depth_f) + scale_y_continuous(expand = c(0, 0)) + ggtitle("") + scale_fill_manual(values=ap) + theme(legend.title=element_blank()) + geom_bar(aes(fill=D1), stat="identity", position="stack", width =0.9) +theme_classic() + theme(text = element_text(size=14))+theme(axis.text.x = element_text(angle = 90)) + xlab("Station") +ylab("Relative Abundance(%)")
+
+taxabarplotD1
+```
+
+
+## Regional Comparisons
+
+**combine upper and lower filter ---> consider whole community** 
+
+```{r}
+#remove samples that do not have a corresponding top or bottom filter
+ps_pairedfilters <- subset_samples(ps, SampleID %ni% c("F61", "F77", "F83", "F142", "F251", "264"))
+
+mergedps <- merge_samples(ps_pairedfilters, "StnDepthRep")
+print(mergedps)
+```
+
+```{r, message = FALSE, warning = FALSE}
+OTU4clr<- data.frame(t(data.frame(otu_table(mergedps))))
+row.names(OTU4clr) <- gsub("\\.", "", row.names(OTU4clr))
+OTUs.clr <- codaSeq.clr(OTU4clr + 0.5, samples.by.row=TRUE)
+OTU2 <- otu_table(as.matrix(OTUs.clr), taxa_are_rows = TRUE)
+
+metatable9 <- metatable[!duplicated(metatable$StnDepthRep),] 
+metatable9$rn <- lapply(metatable9$StnDepthRep, function(x) paste('X', x, sep = ""))
+
+row.names(metatable9) <- metatable9$rn
+
+META2<- sample_data(metatable9)
+
+mpsCLR <- phyloseq(OTU2,TAX,META2)
+```
+
+```{r AitchinsonPCoA_All, warning = FALSE, message = FALSE }
+pcoa_ordu = ordinate(mpsCLR, "PCoA", "euclidean")
+p_all_filters_merged<-plot_ordination(mpsCLR, pcoa_ordu, color="Depth")+theme_bw() +scale_color_manual(values=c(ap[8], ap[12], ap[5], ap[4])) +geom_point(size=3) +theme(text = element_text(size=16)) 
+p_all_filters_merged
+```
+
+### Surface 
+
+```{r pcoa_surf1}
+physeqSurf<- subset_samples(mpsCLR, Depth == "Surface")
+```
+
+```{r surf10_pcaLines}
+OTUsSurf <- data.frame(t(otu_table(physeqSurf)))
+metaS <- metatable9[row.names(metatable9) %in% row.names(OTUsSurf),]
+Surface_merged<- prcomp(OTUsSurf)
+plot(Surface_merged, type="lines")
+```
+
+```{r PCA_Surf10}
+PCA_Surf_merged<-ggbiplot(Surface_merged, var.axes = FALSE, groups= metaS$Region_SKN, ellipse=FALSE) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1]))+  theme(legend.position="bottom") +ggtitle("A. Surface")+  
+  geom_point(aes(colour=metaS$Region_SKN), size = 6) +geom_text(aes(label=metaS$Station),hjust=-0.2, vjust=0.1, size = 6) 
+PCA_Surf_merged
+```
+
+```{r}
+set.seed(1)
+
+adonis2(vegdist(OTUsSurf, method = "euclidean") ~ Region_SKN, data = metaS)
+```
+
+```{r}
+tst<-adonis_pairwise(x=metaS, dd=vegdist(OTUsSurf, method = "euclidean"), group.var="Region_SKN")
+tst$Adonis.tab
+```
+
+0.8 is cutoff for multicollinearity
+
+temp is 0.97 correlated with DO
+
+```{r, warning = FALSE}
+cca_litdir = ordinate(physeqSurf, formula  = ~ Temp + Salinity + TURB + CDOM+ NITRAT+ NITRIT+ SILCAT+ PHSPHT+NH4 , "RDA")
+p0 <- plot_ordination(physeqSurf, cca_litdir, type = "samples", color = "Region_SKN") +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1]))+ theme(text = element_text(size = 16)) +  theme(legend.position="bottom") +ggtitle("A. Surface") + geom_point(size = 4) +geom_text(aes(label=Station),hjust=-0.3, vjust=0.1, size = 4, color = "black")
+# Now add the environmental variables as arrows
+arrowmat = vegan::scores(cca_litdir, display = "bp")
+arrowdf <- data.frame(labels = rownames(arrowmat), arrowmat)
+arrow_map = aes(xend = 3* RDA1, yend = 3* RDA2, x = 0, y = 0, shape = NULL, color = NULL, 
+    label = labels)
+label_map = aes(x = 3.5 * RDA1, y = 3.5 * RDA2, shape = NULL, color = NULL, 
+    label = labels)
+arrowhead = arrow(length = unit(0.02, "npc"))
+surfRDA_plot = p0 + geom_segment(arrow_map, size = 0.5, data = arrowdf, color = "gray", 
+    arrow = arrowhead) + geom_text(label_map, size = 4, data = arrowdf)
+surfRDA_plot
+```
+
+```{r}
+surfRDA <- rda(OTUsSurf ~ Temp + Salinity + TURB + CDOM+ NITRAT+ NITRIT+ PHSPHT+ SILCAT+ NH4, data = metaS)
+anova(surfRDA, perm = 999)
+```
+
+```{r}
+anova(surfRDA, by="term", perm=999)
+```
+
+```{r}
+mod<-varpart(OTUsSurf, metaS["Temp"], metaS["Region_SKN"])
+mod
+#plot(mod)
+```
+
+
+### SCM
+
+```{r pcoa_scm}
+physeqSCM<- subset_samples(mpsCLR, Depth == "SCM")
+```
+
+```{r SCM_pcaLines}
+OTUsSCM <- data.frame(t(otu_table(physeqSCM)))
+metaSCM<- metatable9[row.names(metatable9) %in% row.names(OTUsSCM),]
+SCM_merged<- prcomp(OTUsSCM)
+plot(SCM_merged, type="lines")
+```
+
+```{r PCA_SCM}
+PCA_SCM<-ggbiplot(SCM_merged, var.axes = FALSE, groups= metaSCM$Region_SKN, ellipse=FALSE) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1]))+  theme(legend.position="bottom") +ggtitle("C. SCM")  +  
+  geom_point(aes(colour=metaSCM$Region_SKN), size = 6) +geom_text(aes(label=metaSCM$Station),hjust=-0.2, vjust=0.1, size = 6) 
+PCA_SCM
+```
+```{r}
+#ggsave("PCA_SCM_merged.png")
+```
+
+```{r}
+set.seed(1)
+adonis2(vegdist(OTUsSCM, method = "euclidean") ~ Region_SKN, data = metaSCM)
+```
+```{r}
+tst<-adonis_pairwise(x=metaSCM, dd=vegdist(OTUsSCM, method = "euclidean"), group.var="Region_SKN")
+tst$Adonis.tab
+```
+
+```{r, warning = FALSE}
+cca_litdir = ordinate(physeqSCM, formula  = ~ Temp + Salinity + DO + m + TURB + CDOM+ NITRAT+ NITRIT+SILCAT+ PHSPHT+NH4 , "RDA")
+p0 = plot_ordination(physeqSCM, cca_litdir, type = "samples", color = "Region_SKN")   +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1]))+ theme(text = element_text( size = 16)) +  theme(legend.position="bottom") +ggtitle("B. SCM") + geom_point(size = 4) +geom_text(aes(label=Station),hjust=-0.3, vjust=0.1, size = 4, color = "black")
+# Now add the environmental variables as arrows
+arrowmat = vegan::scores(cca_litdir, display = "bp")
+arrowdf <- data.frame(labels = rownames(arrowmat), arrowmat)
+arrow_map = aes(xend = 3* RDA1, yend = 3* RDA2, x = 0, y = 0, shape = NULL, color = NULL, 
+    label = labels)
+label_map = aes(x = 3.5 * RDA1, y = 3.5 * RDA2, shape = NULL, color = NULL, 
+    label = labels)
+arrowhead = arrow(length = unit(0.02, "npc"))
+SCMRDA_plot = p0 + geom_segment(arrow_map, size = 0.5, data = arrowdf, color = "gray", 
+    arrow = arrowhead) + geom_text(label_map, size = 4, data = arrowdf)
+SCMRDA_plot
+```
+
+```{r}
+SCMRDA <- rda(OTUsSCM ~ Temp + Salinity + DO + m + TURB + CDOM+ NITRAT+ NITRIT+ SILCAT+ PHSPHT+NH4, data = metaSCM)
+anova(SCMRDA, perm=1000)
+```
+
+```{r}
+anova(SCMRDA, by="term", perm=1000)
+```
+
+```{r}
+mod<-varpart(OTUsSCM, metaSCM["Temp"], metaSCM["Region_SKN"], metaSCM["m"])
+mod
+```
+
+### Mid
+
+```{r pcoa_mid}
+physeqMid<- subset_samples(mpsCLR, altDepth == "Mid")
+```
+
+```{r Mid_pcaLines}
+OTUsMid <- data.frame(t(otu_table(physeqMid)))
+metaM <- metatable9[row.names(metatable9) %in% row.names(OTUsMid),]
+Mid_10<- prcomp(OTUsMid)
+plot(Mid_10, type="lines")
+```
+
+```{r PCA_mid}
+PCA_Mid<-ggbiplot(Mid_10, var.axes = FALSE, groups= metaM$Region_SKN, ellipse=FALSE) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1])) +  theme(legend.position="bottom") +ggtitle("E. Mid")  +  
+  geom_point(aes(colour=metaM$Region_SKN), size = 6) +geom_text(aes(label=metaM$Station),hjust=-0.2, vjust=0.1, size = 6) 
+PCA_Mid
+```
+
+```{r}
+set.seed(1)
+adonis2(vegdist(OTUsMid, method = "euclidean") ~ Region_SKN, data = metaM)
+```
+
+```{r}
+tst<-adonis_pairwise(x=metaM, dd=vegdist(OTUsMid, method = "euclidean"), group.var="Region_SKN")
+tst$Adonis.tab
+```
+
+RDA
+0.8 is cutoff for multicollinearity
+Temp colinn with DO, CDOM, Nitrate, Silicate, Phosphate
+
+
+```{r, warning = FALSE}
+cca_litdir = ordinate(physeqMid, formula  = ~ Temp + Salinity + TURB + NITRIT + NH4 , "RDA")
+p0 = plot_ordination(physeqMid, cca_litdir, type = "samples", color = "Region_SKN") +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1]))+ theme(text = element_text( size = 16)) +  theme(legend.position="bottom") +ggtitle("C. Mid") + geom_point(size = 4) +geom_text(aes(label=Station),hjust=-0.3, vjust=0.1, size = 4, color = "black")
+# Now add the environmental variables as arrows
+arrowmat = vegan::scores(cca_litdir, display = "bp")
+# Add labels, make a data.frame
+arrowdf <- data.frame(labels = rownames(arrowmat), arrowmat)
+# Define the arrow aesthetic mapping
+arrow_map = aes(xend = 3* RDA1, yend = 3* RDA2, x = 0, y = 0, shape = NULL, color = NULL, 
+    label = labels)
+label_map = aes(x = 3.5 * RDA1, y = 3.5 * RDA2, shape = NULL, color = NULL, 
+    label = labels)
+# Make a new graphic
+arrowhead = arrow(length = unit(0.02, "npc"))
+MidRDA_plot = p0 + geom_segment(arrow_map, size = 0.5, data = arrowdf, color = "gray", 
+    arrow = arrowhead) + geom_text(label_map, size = 4, data = arrowdf)
+MidRDA_plot
+```
+
+```{r}
+MidRDA <- rda(OTUsMid ~ Temp + Salinity + TURB + NITRIT + NH4, data = metaM)
+anova(MidRDA, perm = 1000) 
+```
+
+```{r}
+anova(MidRDA, by="term", perm=1000)
+```
+
+```{r}
+mod<-varpart(OTUsMid, metaM["Region_SKN"], metaM["Salinity"], metaM["NH4"] )
+mod
+```
+
+### Bottom 
+
+*(except mid for station 3 and 18)*
+
+```{r pcoa_bott}
+physeqBott<- subset_samples(mpsCLR, altDepth == "Bottom")
+ordu = ordinate(physeqBott, "PCoA", "euclidean")
+pBott<-plot_ordination(physeqBott, ordu, color="Vent")+theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1]))+ geom_point(size=3) +ggtitle("Bottom") +theme(text = element_text(size=16)) + guides(color = FALSE) +geom_text(aes(label=Station),hjust=-0.2, vjust=0.1)
+pBott
+```
+
+```{r Bottom_pcaLines}
+OTUsBot <- data.frame(t(otu_table(physeqBott)))
+metaB <- metatable9[row.names(metatable9) %in% row.names(OTUsBot),]
+Bot_10<- prcomp(OTUsBot)
+plot(Bot_10, type="lines")
+```
+
+```{r PCA_Bottom}
+PCA_Bot<-ggbiplot(Bot_10, var.axes = FALSE, groups= metaB$Region_SKN, ellipse=FALSE) +theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1])) +  theme(legend.position="bottom") +ggtitle("G. Bottom")  +  
+  geom_point(aes(colour=metaB$Region_SKN, shape = metaB$Vent), size = 6) +geom_text(aes(label=metaB$Station),hjust=-0.2, vjust=0.1, size = 6) 
+PCA_Bot
+```
+
+```{r}
+set.seed(1)
+adonis2(vegdist(OTUsBot, method = "euclidean") ~ Region_SKN, data = metaB)
+```
+
+```{r}
+tst<-adonis_pairwise(x=metaB, dd=vegdist(OTUsBot, method = "euclidean"), group.var="Region_SKN")
+tst$Adonis.tab
+```
+
+Vent Testing for Bottom Water
+**Bottom-water by Hydrothermal Activity**
+
+**PERMANOVA**
+
+```{r}
+set.seed(1)
+physeqBottom<- subset_samples(psCLR, Depth == "Bottom")
+OTUsBottom <- data.frame(otu_table(physeqBottom))
+metab <- metatable[row.names(metatable) %in% row.names(OTUsBottom),]
+adonis2(vegdist(OTUsBottom, method = "euclidean") ~ Vent, data = metab)
+```
+
+
+```{r, warning = FALSE}
+cca_litdir = ordinate(physeqBott, formula  = ~ Temp + Salinity + DO + TURB + NITRIT+NH4 , "RDA")
+p0 = plot_ordination(physeqBott, cca_litdir, type = "samples", color = "Region_SKN", shape = "Vent")+theme_bw() +scale_color_manual(values=c(ap[4], ap[11], ap[2], ap[1]))+ theme(text = element_text(size =16)) +  theme(legend.position="bottom") +ggtitle("D. Bottom") + geom_point(size = 4) +geom_text(aes(label=Station),hjust=-0.3, vjust=0.1, size = 4, color = "black") +scale_shape_manual(values=c(20, 17))
+# Now add the environmental variables as arrows
+arrowmat = vegan::scores(cca_litdir, display = "bp")
+# Add labels, make a data.frame
+arrowdf <- data.frame(labels = rownames(arrowmat), arrowmat)
+# Define the arrow aesthetic mapping
+arrow_map = aes(xend = 3* RDA1, yend = 3* RDA2, x = 0, y = 0, shape = NULL, color = NULL, 
+    label = labels)
+label_map = aes(x = 3.5 * RDA1, y = 3.5 * RDA2, shape = NULL, color = NULL, 
+    label = labels)
+# Make a new graphic
+arrowhead = arrow(length = unit(0.02, "npc"))
+BottRDA_plot = p0 + geom_segment(arrow_map, size = 0.5, data = arrowdf, color = "gray", 
+    arrow = arrowhead) + geom_text(label_map, size = 4, data = arrowdf)
+BottRDA_plot
+```
+
+```{r}
+BotRDA <- rda(OTUsBot ~ Temp + Salinity + DO + TURB + NITRIT+NH4, data = metaB)
+anova(BotRDA, perm=500)
+```
+
+```{r}
+anova(BotRDA, by="term", perm=999)
+```
+
+```{r}
+RsquareAdj(BotRDA)$r.square 
+```
+
+```{r}
+mod<-varpart(OTUsBot, metaB["DO"], metaB["TURB"], metaB["Region_SKN"], metaB["NH4"] )
+mod
+```
+
+variance inflation factors:
+```{r}
+vif.cca(BotRDA)
+```
+"anything above 10 should be inspected or discarded" - from docs
+
+Put the plots together: 
+
+```{r}
+ggarrange(surfRDA_plot, SCMRDA_plot, MidRDA_plot, BottRDA_plot, common.legend = TRUE, legend = "bottom")
+```
+
+```{r}
+#ggsave("RDA4Depths.eps", width = 8, height =8)
 ```
 
 ##DESeq2 -- Differential abundance testing 
+
 subset rawcount phyloseq object to just hold bottom samples:
 ```{r}
 bottomraw<- subset_samples(ps, Depth=="Bottom")
 ```
-First, with only station 2 and 10 considered as hydrothermal sites:
-```{r}
-ddse <- phyloseq_to_deseq2(bottomraw, ~VentANAHTM)
-```
-```{r, warning = FALSE, message = FALSE}
-ddse2 <- DESeq(ddse, test="Wald", fitType="parametric")
-```
-```{r}
-res<- results(ddse2,  cooksCutoff = FALSE)
-alpha = 0.01
-sigtab = res[which(res$padj < alpha), ]
-dim(sigtab)
-```
 
-And if station 11 is included ...
 ```{r}
+bottomraw<-subset_taxa(bottomraw, D2 != "Metazoa")
+bottomraw<-subset_taxa(bottomraw, D1 != "")
+bottomraw<-subset_taxa(bottomraw, D1 != "NA")
 ddse <- phyloseq_to_deseq2(bottomraw, ~Vent)
 ```
+
 ```{r, warning = FALSE, message = FALSE}
 ddse2 <- DESeq(ddse, test="Wald", fitType="parametric")
 ```
@@ -874,7 +955,6 @@ alpha = 0.01
 sigtab = res[which(res$padj < alpha), ]
 dim(sigtab)
 ```
-
 
 ```{r}
 sigtab = cbind(as(sigtab, "data.frame"), as(tax_table(bottomraw)[rownames(sigtab), ], "matrix"))
@@ -910,6 +990,355 @@ sigplot
 ```
 ```{r}
 #ggsave("sigplot.pdf")
+```
+
+
+# CTD Plots
+
+
+```{r}
+CTDnames <- c("scan", "depSM", "prDM", "t090C", "c0S/m", "t190C", "c1S/m", "oxRaw1", "oxRaw2", "CStarTr0", "CStarAt0", "v4", "flSP", "seaTurbMtr", "wetCDOM", "altM", "dz/dtM", "modError", "pumps", "sbeox0Mm", "sbeox1Mm", "nbin", "salPSU", "Density", "potemp090C", "salPSU2", "Density2", "potemp190C", "cStation")
+```
+
+CTD data
+```{r}
+C01 <- read.table("CTDdata/C01M001.txt", col.names = CTDnames)
+C01$cStation <- "C01"
+C02 <- read.table("CTDdata/C02M001.txt", col.names = CTDnames)
+C02$cStation <- "C02"
+C03 <- read.table("CTDdata/C03M001.txt", col.names = CTDnames)
+C03$cStation <- "C03"
+C04 <- read.table("CTDdata/C04M001.txt", col.names = CTDnames)
+C04$cStation <-"C04"
+C05 <- read.table("CTDdata/C05M001.txt", col.names = CTDnames)
+C05$cStation<- "C05"
+C06 <- read.table("CTDdata/C06M001.txt", col.names = CTDnames)
+C06$cStation <- "C06"
+C08 <- read.table("CTDdata/C08M001.txt", col.names = CTDnames)
+C08$cStation <- "C08"
+C09 <- read.table("CTDdata/C09M001.txt", col.names = CTDnames)
+C09$cStation <- "C09"
+C10 <- read.table("CTDdata/C10M002.txt", col.names = CTDnames)
+C10$cStation <- "C10"
+C11 <- read.table("CTDdata/C11M001.txt", col.names = CTDnames)
+C11$cStation <- "C11"
+C12 <- read.table("CTDdata/C12M001.txt", col.names = CTDnames)
+C12$cStation <- "C12"
+C13 <- read.table("CTDdata/C13M001.txt", col.names = CTDnames)
+C13$cStation <- "C13"
+C14 <- read.table("CTDdata/C14M001.txt", col.names = CTDnames)
+C14$cStation <- "C14"
+C15 <- read.table("CTDdata/C15M001.txt", col.names = CTDnames)
+C15$cStation <- "C15"
+C16 <- read.table("CTDdata/C16M001.txt", col.names = CTDnames)
+C16$cStation <- "C16"
+C17 <- read.table("CTDdata/C17M001.txt", col.names = CTDnames)
+C17$cStation <- "C17"
+C18 <- read.table("CTDdata/C18M001.txt", col.names = CTDnames)
+C18$cStation <- "C18"
+
+ctdALL <- rbind(C01, C02, C03, C04, C05, C06, C08, C09, C10, C11, C12, C13, C14, C15, C16, C17, C18)
+
+ctdALL_turb <- ctdALL[, c("depSM", "seaTurbMtr", "cStation")]
+names(ctdALL_turb) <- c("Depth", "Value", "Station")
+ctdALL_turb$var <- "Turbidity"
+
+ctdALL_CDOM <- ctdALL[, c("depSM", "wetCDOM", "cStation")]
+names(ctdALL_CDOM) <- c("Depth", "Value", "Station")
+ctdALL_CDOM <- ctdALL_CDOM[ctdALL_CDOM$Depth >200,]
+ctdALL_CDOM$var <- "CDOM"
+
+ctd_turb_CDOM <- rbind(ctdALL_CDOM, ctdALL_turb)
+ctd_turb_CDOM$Depth <- ctd_turb_CDOM$Depth * -1
+  
+stations <- list(C01, C02, C03, C04, C05, C06, C08, C09, C10, C11, C12, C13, C14, C15, C16, C17, C18)
+```
+
+
+Bottle Chem Data
+```{r}
+nuts<- read.csv("CTDdata/MR1703C20171023071730.csv", stringsAsFactors = FALSE)
+tCO2 <- read.csv("CTDdata/TCO2.csv", stringsAsFactors = FALSE)
+```
+
+```{r}
+nuts$CRUISE <- gsub("-", "", nuts$CRUISE)
+nuts$CRUISE <- str_sub(nuts$CRUISE, 1, str_length(nuts$CRUISE)-1)
+nuts$ID <- paste(nuts$CRUISE, nuts$STNNBR, "00", nuts$CASTNO, formatC(nuts$SAMPNO, width =2, flag = "0"), sep = "")
+nuts$ID <- gsub(" ", "", nuts$ID)
+
+depth <- nuts[, c("ID", "CTDDPT", "DEPTH", "STNNBR", "CASTNO")]
+```
+
+```{r}
+tCO2n <- merge(tCO2, depth, by = "ID" )
+
+tCO2n$CTDDPT <- gsub("-999", "1", tCO2n$CTDDPT )
+
+tCO2n <- tCO2n[tCO2n$TCARBN != "   -999.0", ]
+
+tCO2n <- tCO2n[tCO2n$STNNBR != "   C01" & tCO2n$STNNBR != "   C16" ,]
+
+tCO2n$TCARBN <- as.numeric(tCO2n$TCARBN)
+tCO2n$CTDDPT<- as.numeric(tCO2n$CTDDPT) * -1
+```
+
+
+```{r}
+tCplot <- ggplot(tCO2n, aes(x= TCARBN, y=CTDDPT)) + geom_point()+
+  facet_grid(STNNBR~. , scales = "free_y" ) +theme_bw() + theme(text = element_text(size =10)) +theme(axis.text.x = element_text(angle=60, hjust=1))
+
+tCplot
+```
+
+```{r}
+ggsave("tcarbon.eps", width =5, height = 8)
+```
+
+
+NH4
+```{r}
+nuts$CTDDPT <- gsub("-999", "1", nuts$CTDDPT )
+nuts$CTDDPT<- as.numeric(nuts$CTDDPT) * -1
+nh4 <- nuts[nuts$NH4 > 0,]
+nh4 <- nh4[-c(1,2),]
+nh4 <- nh4[nh4$CTDDPT < -100,]
+nh4$STNNBR = gsub(" ", "",nh4$STNNBR )
+nh4<- nh4[nh4$STNNBR != "C06",]
+
+nh4$STNNBR <- factor(nh4$STNNBR , levels=c("C11", "C10", "C09", "C08", "C03", "C04", "C02", "C05", "C12", "C13", "C14", "C15", "C16", "C17", "C18"))
+```
+
+```{r}
+NH4plot <- ggplot(nh4, aes(x= NH4, y=CTDDPT)) + geom_point()+
+  facet_grid(STNNBR~. , scales = "free_y" ) +theme_bw() + theme(text = element_text(size =10))+theme(axis.text.x = element_text(angle=60, hjust=1))
+
+NH4plot
+```
+
+```{r}
+#ggsave("nh4plot.pdf", width = 5, height= 8)
+```
+
+Turbidity, CDOM
+
+```{r}
+turb_CDOM_plot <- ggplot(ctd_turb_CDOM, aes(x= Value, y=Depth)) + geom_point()+
+  facet_grid( Station~ var ,scales="free") +theme_bw()
+
+turb_CDOM_plot 
+```
+
+Salinity, Chla, showing station 13 is different
+
+```{r}
+ctdALL_psu <- ctdALL[, c("depSM", "salPSU", "cStation")]
+names(ctdALL_psu) <- c("Depth", "Value", "Station")
+ctdALL_psu$var <- "Salinity"
+ctdALL_psu <- ctdALL_psu[ctdALL_psu$Depth <500,]
+
+ctdALL_fluor <- ctdALL[, c("depSM", "flSP", "cStation")]
+names(ctdALL_fluor) <- c("Depth", "Value", "Station")
+ctdALL_fluor <- ctdALL_fluor[ctdALL_fluor$Depth <500,]
+ctdALL_fluor$var <- "Fluorescence"
+
+ctd_psu_fluor <- rbind(ctdALL_fluor, ctdALL_psu)
+ctd_psu_fluor$Depth <- ctd_psu_fluor$Depth * -1
+
+ctd_psu_fluor<- ctd_psu_fluor[ctd_psu_fluor$Station %ni% c("C06","C16", "C01"),]
+```
+
+```{r}
+psu_fluor_plot <- ggplot(ctd_psu_fluor, aes(x= Value, y=Depth, color = Station)) + geom_point()+ facet_grid(~ var ,scales="free") +theme_bw() + scale_color_manual(values=ap) +  theme(text = element_text(size =12))
+
+psu_fluor_plot
+```
+
+```{r}
+ggsave("psu_fluor_plot.eps" )
+```
+
+
+
+
+Nitrite/Nitrate/Phosphate plots showing elevation at station 13
+```{r}
+nnp <- nuts[nuts$CTDDPT > -510,]
+nnp <- nnp[-c(1,2),]
+
+nitrit <- nnp[, c("STNNBR", "CTDDPT", "NITRIT")]
+names(nitrit)<- c("Station", "Depth", "Value")
+nitrit$Var <- "Nitrite"
+
+nitrat<- nnp[, c("STNNBR", "CTDDPT", "NITRAT")]
+names(nitrat)<- c("Station", "Depth", "Value")
+nitrat$Var <- "Nitrate"
+
+phspht <- nnp[, c("STNNBR", "CTDDPT", "PHSPHT")]
+names(phspht)<- c("Station", "Depth", "Value")
+phspht$Var <- "Phosphate"
+
+nnp<- rbind(nitrit, nitrat, phspht)
+
+nnp$Value <- as.numeric(nnp$Value)
+nnp<- nnp[nnp$Value != -999,]
+
+nnp$Station = gsub(" ", "",nnp$Station )
+nnp<- nnp[nnp$Station %ni% c("C06","C16", "C01"),]
+nnp<- nnp[nnp$Var != "NA",]
+```
+
+```{r}
+nnp_plot <- ggplot(nnp, aes(x= Value, y=Depth, color = Station)) + geom_point()+ facet_grid(~ Var ,scales="free") +theme_bw() + scale_color_manual(values=ap) +  theme(text = element_text(size =12))
+
+nnp_plot
+```
+
+
+```{r}
+ggsave("nnp_plot.eps")
+```
+
+
+
+For Salinity transects and isosurface plots: 
+
+```{r, warning = FALSE}
+library(oce)
+library(marmap)
+stn1<-read.ctd("CTDdata/C01M001.cnv")
+stn2 <- read.ctd("CTDdata/C02M001.cnv")
+stn3 <- read.ctd("CTDdata/C03M001.cnv")
+stn4 <- read.ctd("CTDdata/C04M001.cnv")
+stn5 <- read.ctd("CTDdata/C05M001.cnv")
+stn6 <- read.ctd("CTDdata/C06M001.cnv")
+stn8 <- read.ctd("CTDdata/C08M001.cnv")
+stn9 <- read.ctd("CTDdata/C09M001.cnv")
+stn10 <- read.ctd("CTDdata/C10M002.cnv")
+stn11 <- read.ctd("CTDdata/C11M001.cnv")
+stn12 <- read.ctd("CTDdata/C12M001.cnv")
+stn13 <- read.ctd("CTDdata/C13M001.cnv")
+stn14 <- read.ctd("CTDdata/C14M001.cnv")
+stn15 <- read.ctd("CTDdata/C15M001.cnv")
+stn16 <- read.ctd("CTDdata/C16M001.cnv")
+stn17 <- read.ctd("CTDdata/C17M001.cnv")
+stn18 <- read.ctd("CTDdata/C18M001.cnv")
+
+ctd.list <- list(stn1,stn2, stn3, stn4, stn5, stn6, stn8, stn9, stn10, stn11, stn12, stn13, stn14, stn15, stn16, stn17, stn18)
+```
+
+
+
+
+```{r}
+section = list(stn5, stn2, stn4, stn3)%>%
+  as.section()
+```
+
+```{r}
+lon <- section[["longitude", "byStation"]]
+lat <- section[["latitude", "byStation"]]
+lon1 <- min(lon) - 0.5
+lon2 <- max(lon) + 0.5
+lat1 <- min(lat) - 0.5
+lat2 <- max(lat) + 0.5
+
+b <- getNOAA.bathy(lon1, lon2, lat1, lat2, resolution=1, keep=TRUE)
+```
+
+```{r}
+plot(section, which="salinity", xtype = 'distance',showBottom=FALSE, ztype = 'image')
+loni <- seq(min(lon), max(lon), 0.1)
+lati <- approx(lon, lat, loni, rule=2)$y
+dist <- rev(geodDist(loni, lati, alongPath=TRUE))
+bottom <- get.depth(b, x=loni, y=lati, locator=FALSE)
+polygon(c(dist, min(dist), max(dist)), c(-bottom$depth, 10000, 10000), col='grey')
+```
+
+
+```{r}
+section%>%plot(which = c("map", "temperature", "salinity", "oxygen"),
+               ztype = "image", showStations = TRUE)
+#polygon(c(dist, min(dist), max(dist)), c(-bottom$depth, 10000, 10000), col='grey')
+```
+
+```{r}
+section = list(stn11, stn10, stn9, stn8, stn5, stn12, stn14, stn13)%>%
+  as.section()
+
+plot(section, which=c("map", "temperature", "salinity", "oxygen"), xtype = 'distance',showBottom=FALSE, ztype = 'image', showStations=TRUE)
+#polygon(c(dist, min(dist), max(dist)), c(-bottom$depth, 10000, 10000), col='grey')
+```
+
+```{r}
+require(tidyverse)
+require(lubridate)
+require(oce)
+require(sf)
+```
+
+Isosurface plots
+```{r}
+require(ocedata)
+data("coastlineWorld")
+data("coastlineWorldMedium")
+data("coastlineWorldFine")
+
+Meta <- read.csv("sampleMap.csv")
+```
+
+Bottom water Salinity Plot
+```{r}
+surfaceB <- Meta[Meta$Depth =="Bottom",]
+surfB<- surfaceB[!duplicated(surfaceB$cStation),]
+
+x=surfB$Long
+y=surfB$Lat
+z=surfB$Temp
+s=surfB$Salinity
+
+interp.temp = interpBarnes(x = x, 
+                           y = y, 
+                           z = z, 
+                           xg = pretty(x, n = 50) , 
+                           yg = pretty(y, n = 50))
+interp.sal = interpBarnes(x = x, 
+                           y = y, 
+                           z = s, 
+                           xg = pretty(x, n = 100) , 
+                           yg = pretty(y, n = 100))
+```
+
+
+```{r}
+#pdf("isosurface_Bottom_Salinity.pdf", 7, 6)
+lonlim <- c(123, 130.9)
+latlim <- c(25.2, 28.4)
+par(fig=c(0,0.95,0,.9))
+## make a base
+mapPlot(coastlineWorldFine, projection="+proj=longlat",
+        col="lightgray", 
+        longitudelim=lonlim, 
+        latitudelim=latlim,
+        clip = TRUE)
+## overlay gridded sst layer
+mapImage(interp.sal$xg, interp.sal$yg, interp.sal$zg, filledContour = TRUE, 
+       col = oce.colors9A(120), zlim = c(34.3,34.6))
+## add polygon
+mapPolygon(coastlineWorldFine, 
+        col="lightgray")
+## ## add points
+mapPoints(longitude = surfB$Long,
+          latitude = surfB$Lat, 
+          pch = 20, 
+          cex = 1.75)
+## add station name on the map
+mapText(longitude = surfB$Long+0.16,
+          latitude = surfB$Lat,
+        labels = surfB$Station)
+par(fig=c(0.4,1,0.0,.9), new = TRUE)
+drawPalette(zlim = c(34.35,34.65), col = oce.colors9A(120))
+#dev.off()
 ```
 
 # Session Info
